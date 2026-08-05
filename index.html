@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#120823" />
+<title>En una nota</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsmediatags@0.3.4/dist/jsmediatags.min.js"></script>
+<style>
+:root{--bg:#10071f;--panel:#1d1033;--pink:#ff2d8d;--yellow:#ffd84a;--cyan:#38e8ff;--text:#fff;--muted:#b9acd1;--ok:#55e59b;--bad:#ff6b6b;--red:#ef1b24;--redDark:#79070c}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at top,#32145b 0,#10071f 45%,#08040f 100%);color:var(--text);min-height:100dvh}
+.wrap{max-width:620px;margin:auto;padding:20px 16px calc(24px + env(safe-area-inset-bottom))}.brand{text-align:center;margin:12px 0 22px}.brand h1{font-size:clamp(34px,10vw,58px);margin:0;letter-spacing:-2px}.brand b{color:var(--yellow)}.brand p{margin:6px 0;color:var(--muted)}
+.card{background:rgba(29,16,51,.92);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.35);margin-bottom:14px}.hidden{display:none!important}
+label{display:block;color:var(--muted);font-size:14px;margin:10px 2px 7px}input{width:100%;padding:15px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.15);background:#10091d;color:#fff;font-size:18px;outline:none}input:focus{border-color:var(--cyan)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.btn{width:100%;border:0;border-radius:18px;padding:15px 16px;font-weight:800;font-size:17px;cursor:pointer;background:linear-gradient(135deg,var(--pink),#a52cff);color:#fff;box-shadow:0 10px 28px rgba(255,45,141,.25)}.btn.secondary{background:#2b1b45;box-shadow:none}.btn.ok{background:linear-gradient(135deg,#17b96d,var(--ok));color:#07170f}.btn.bad{background:linear-gradient(135deg,#ff4d5f,#ff8c72)}
+.roomcode{text-align:center;font-size:42px;font-weight:900;letter-spacing:8px;color:var(--yellow);margin:6px 0}.small{text-align:center;color:var(--muted);font-size:14px}.status{display:flex;justify-content:center;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin:8px 0 0}.dot{width:9px;height:9px;border-radius:50%;background:#888}.dot.on{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+.buzzer{width:min(78vw,360px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;margin:22px auto;border:12px solid #8d0a11;background:radial-gradient(circle at 35% 28%,#ff6a70,var(--red) 43%,#a4080f 73%);box-shadow:0 18px 0 var(--redDark),0 30px 55px rgba(239,27,36,.42),inset 0 0 0 7px rgba(255,255,255,.18);font-size:clamp(34px,11vw,56px);font-weight:1000;text-align:center;line-height:.95;color:white;user-select:none;-webkit-tap-highlight-color:transparent}.buzzer:active:not(:disabled){transform:translateY(8px);box-shadow:0 10px 0 var(--redDark),0 20px 35px rgba(239,27,36,.32)}.buzzer:disabled{filter:grayscale(.75);opacity:.55}
+.countdown{position:fixed;inset:0;display:grid;place-items:center;background:rgba(5,2,11,.88);z-index:50;font-size:min(42vw,220px);font-weight:1000;color:var(--yellow);text-shadow:0 0 28px rgba(255,216,74,.65);animation:pulse .65s ease both}.countdown.go{font-size:min(24vw,130px);color:var(--ok)}
+.flash{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle,rgba(239,27,36,.95),rgba(55,0,4,.98));z-index:45;text-align:center;padding:24px;animation:flashIn .35s ease both}.flash .big{font-size:clamp(42px,14vw,92px);font-weight:1000;line-height:.95}.flash .sub{font-size:clamp(20px,6vw,34px);font-weight:800;margin-top:12px}.flash .react{margin-top:16px;color:#fffbd0;font-size:20px;font-weight:900}
+@keyframes pulse{0%{transform:scale(.55);opacity:0}65%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}@keyframes flashIn{0%{opacity:0;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+.winner{text-align:center;padding:18px;border-radius:20px;background:linear-gradient(135deg,rgba(255,216,74,.16),rgba(56,232,255,.12));border:1px solid rgba(255,216,74,.35)}.winner .name{font-size:36px;font-weight:900;color:var(--yellow);word-break:break-word}.winner .time{color:var(--muted)}
+.players{display:grid;gap:8px}.player{display:flex;justify-content:space-between;align-items:center;background:#130b23;border-radius:14px;padding:12px 14px}.player strong{font-size:17px}.score{font-weight:900;color:var(--cyan);font-size:19px}.host-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.host-controls .wide{grid-column:1/-1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#000e;color:#fff;padding:12px 16px;border-radius:14px;opacity:0;pointer-events:none;transition:.2s;max-width:90vw;text-align:center;z-index:30}.toast.show{opacity:1}.note{font-size:13px;color:var(--muted);line-height:1.4}.topbar{display:flex;justify-content:space-between;align-items:center;gap:8px}.pill{background:#10091d;border-radius:999px;padding:8px 11px;color:var(--muted);font-size:13px}.top-actions{display:flex;gap:7px}.mini{width:auto;padding:9px 12px;font-size:14px}
+.modal{position:fixed;inset:0;background:#05020bd9;display:grid;place-items:center;padding:18px;z-index:20}.modal-card{width:min(420px,100%);background:#1d1033;border:1px solid #ffffff1c;border-radius:24px;padding:20px;text-align:center;box-shadow:0 22px 70px #000}.qrbox{background:white;border-radius:18px;padding:14px;width:max-content;margin:14px auto}.qrbox img,.qrbox canvas{display:block}.modal-code{font-size:32px;font-weight:900;letter-spacing:6px;color:var(--yellow)}
+
+.song-loader{display:grid;gap:10px}.filepick{display:block;text-align:center;cursor:pointer}.filepick input{display:none}.song-status{padding:12px 14px;background:#10091d;border-radius:14px;color:var(--muted);font-size:14px}.song-card{text-align:center;overflow:hidden}.cover{width:min(220px,65vw);aspect-ratio:1;object-fit:cover;border-radius:20px;background:#10091d;margin:8px auto 14px;display:block;box-shadow:0 14px 34px #0008}.song-title{font-size:28px;font-weight:1000;color:var(--yellow);word-break:break-word}.song-artist{font-size:18px;font-weight:800;margin-top:4px}.song-album{font-size:14px;color:var(--muted);margin-top:5px}.host-note{font-size:13px;color:var(--muted);line-height:1.4}.audio-warning{color:#ffd84a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><h1>EN UNA <b>NOTA</b></h1><p>Botoneras musicales desde el celular</p></div>
+
+  <section id="home" class="card">
+    <label>Tu nombre</label><input id="name" maxlength="20" placeholder="Ej: Caqito" autocomplete="nickname" />
+    <label>Código de sala</label><input id="room" maxlength="6" placeholder="Ej: 4821" inputmode="numeric" />
+    <div class="row" style="margin-top:14px"><button id="create" class="btn">Crear partida</button><button id="join" class="btn secondary">Unirme</button></div>
+    <div class="status"><span id="dot" class="dot"></span><span id="connection">Conectando…</span></div>
+    <p class="note">Abrí este mismo archivo en los dispositivos. Uno crea la sala y los demás entran con el código.</p>
+  </section>
+
+  <section id="game" class="hidden">
+    <div class="card">
+      <div class="topbar"><span class="pill" id="rolePill">Jugador</span><div class="top-actions"><button id="showQr" class="btn secondary mini">QR</button><button id="leave" class="btn secondary mini">Salir</button></div></div>
+      <div class="small">CÓDIGO DE SALA</div><div id="code" class="roomcode">----</div>
+      <div id="roundText" class="small">Esperando una nueva ronda…</div>
+    </div>
+
+    <div id="winnerBox" class="card winner hidden"><div class="small">APRETÓ PRIMERO</div><div id="winnerName" class="name">—</div><div id="winnerTime" class="time"></div></div>
+
+    <div id="playerBuzzerCard" class="card"><button id="buzz" class="buzzer" disabled>¡LA SÉ!</button><div id="buzzHint" class="small">El anfitrión debe iniciar la ronda</div></div>
+
+    <div id="songReveal" class="card song-card hidden"><div class="small">LA CANCIÓN ERA</div><img id="songCover" class="cover hidden" alt="Portada del álbum"><div id="songTitle" class="song-title">—</div><div id="songArtist" class="song-artist"></div><div id="songAlbum" class="song-album"></div></div>
+
+    <div id="hostPanel" class="card hidden">
+      <div class="song-loader">
+        <label class="btn secondary filepick">🎵 Seleccionar canciones<input id="songFiles" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" multiple></label>
+        <div id="songStatus" class="song-status">Canción de prueba lista. Podés iniciar ahora o seleccionar varios MP3.</div>
+        <div class="host-note">Podés jugar sin cargar nada usando la canción de prueba incluida. Para usar las tuyas, seleccioná varios MP3. Quedan solamente en este dispositivo y empiezan al azar entre 0 y 40 segundos.</div>
+      </div>
+      <div class="host-controls" style="margin-top:14px"><button id="correct" class="btn ok" disabled>✓ CORRECTO</button><button id="wrong" class="btn bad" disabled>✕ INCORRECTO</button><button id="newRound" class="btn wide">Nueva ronda</button></div>
+    </div>
+    <div class="card"><div class="small" style="text-align:left;margin-bottom:10px">PUNTAJES</div><div id="players" class="players"></div></div>
+  </section>
+</div>
+<div id="qrModal" class="modal hidden"><div class="modal-card"><div class="small">ESCANEÁ PARA VER EL CÓDIGO</div><div id="qrCode" class="qrbox"></div><div id="qrRoom" class="modal-code"></div><p id="qrHelp" class="note"></p><button id="closeQr" class="btn secondary">Cerrar</button></div></div>
+<div id="countdown" class="countdown hidden"></div><div id="winnerFlash" class="flash hidden"><div><div id="flashName" class="big">—</div><div class="sub">FUE EL PRIMERO</div><div id="flashReaction" class="react"></div></div></div><div id="toast" class="toast"></div>
+<script>
+(() => {
+  const $=id=>document.getElementById(id), STORAGE='enunanota_session_v6', base='enunanota/v6/';
+  const saved=(()=>{try{return JSON.parse(localStorage.getItem(STORAGE)||'null')}catch{return null}})();
+  const uid=()=>crypto.randomUUID?.()||Math.random().toString(36).slice(2)+Date.now();
+  const me={id:saved?.id||uid(),name:saved?.name||'',host:!!saved?.host,room:saved?.room||''};
+  let client,connected=false,state=null,entered=false,restorePending=!!saved,audioCtx,lastWinnerKey='',countdownTimer=null,flashTimer=null,tracks=[],currentTrack=null,music=new Audio(),countdownAudio=null;
+  const demoTrack={id:'demo-incluida',file:null,playUrl:'sounds/demo-cancion.wav',meta:{title:'Canción de prueba',artist:'En una nota',album:'Demo',cover:''},demo:true};
+
+  function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2400)}
+  function saveSession(){localStorage.setItem(STORAGE,JSON.stringify(me))}
+  function clearSession(){localStorage.removeItem(STORAGE)}
+  function topic(kind='events'){return base+me.room+'/'+kind}
+  function pub(msg,retain=false){if(!connected)return toast('Todavía no hay conexión');client.publish(topic(),JSON.stringify({...msg,room:me.room,at:Date.now()}),{qos:0,retain})}
+  function defaultState(){return {room:me.room,round:0,open:false,winner:null,countdownUntil:0,roundStartedAt:0,players:{},blocked:[],song:null,revealed:false,usedSongs:[]}}
+  function broadcastState(){if(me.host&&state)client.publish(topic('state'),JSON.stringify(state),{retain:true})}
+  function normalizeName(s){return String(s||'').trim().toLocaleLowerCase('es')}
+
+  const SOUND={
+    buzz:'sounds/ding.mp3',
+    correct:'sounds/correcto.mp3',
+    wrong:'sounds/incorrecto.mp3',
+    countdown:'sounds/cuenta-regresiva.mp3',
+    go:'sounds/ya.mp3'
+  };
+  const sfx={};
+  function ensureAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();Object.entries(SOUND).forEach(([k,v])=>{if(!sfx[k]){sfx[k]=new Audio(v);sfx[k].preload='auto'}})}
+  function playSfx(name,{loop=false,restart=true,volume=1}={}){try{ensureAudio();const a=sfx[name];if(!a)return;if(restart){a.pause();a.currentTime=0}a.loop=loop;a.volume=volume;const p=a.play();p?.catch?.(()=>{});return a}catch{}}
+  function stopSfx(name){const a=sfx[name];if(a){a.pause();a.currentTime=0;a.loop=false}}
+  function buzzSound(){playSfx('buzz');navigator.vibrate?.([90])}
+  function winnerSound(){navigator.vibrate?.([120,60,180])}
+  function correctSound(){playSfx('correct');navigator.vibrate?.(80)}
+  function wrongSound(){playSfx('wrong');navigator.vibrate?.([120,70,160])}
+  function startCountdownSound(){stopSfx('countdown');countdownAudio=playSfx('countdown',{loop:true,volume:.9})}
+  function stopCountdownSound(){stopSfx('countdown');countdownAudio=null}
+  function goSound(){playSfx('go');navigator.vibrate?.(45)}
+
+  function connect(){
+    try{
+      client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{clientId:'eun2_'+me.id,clean:true,connectTimeout:9000,reconnectPeriod:2000});
+      client.on('connect',()=>{connected=true;$('dot').classList.add('on');$('connection').textContent='Conectado';if(restorePending&&!entered){restorePending=false;enter(true)}});
+      client.on('reconnect',()=>{$('connection').textContent='Reconectando…'});
+      client.on('offline',()=>{connected=false;$('dot').classList.remove('on');$('connection').textContent='Sin conexión'});
+      client.on('message',(t,p)=>{try{handle(JSON.parse(p.toString()))}catch{}});
+    }catch{$('connection').textContent='Error de conexión'}
+  }
+
+  function enter(restoring=false){
+    entered=true;saveSession();$('home').classList.add('hidden');$('game').classList.remove('hidden');$('code').textContent=me.room;$('rolePill').textContent=me.host?'Anfitrión (no juega)':'Jugador';$('hostPanel').classList.toggle('hidden',!me.host);$('playerBuzzerCard').classList.toggle('hidden',me.host);
+    client.subscribe([topic(),topic('state')]);
+    if(me.host){
+      let gotState=false;
+      const wait=setTimeout(()=>{if(!gotState&&!state){state=defaultState();broadcastState();render()}},700);
+      const probe=setInterval(()=>{if(state){gotState=true;clearTimeout(wait);clearInterval(probe);delete state.players[me.id];broadcastState();render()}},100);
+      setTimeout(()=>clearInterval(probe),1800);
+    } else {
+      pub({type:'join',id:me.id,name:me.name,reconnect:restoring});
+      $('buzzHint').textContent='Entrando a la sala…';
+    }
+  }
+
+  function rejectJoin(reason){toast(reason||'No se pudo entrar');clearSession();setTimeout(()=>location.reload(),1200)}
+
+  function handle(m){
+    if(m.room&&m.room!==me.room)return;
+    if(m.players){state=m;render();return}
+    if(m.type==='joinResult'&&m.id===me.id){if(!m.accepted)return rejectJoin(m.reason);toast(m.reconnected?'Sesión recuperada':'Entraste a la sala');return}
+    if(m.type==='kick'&&m.id===me.id)return rejectJoin(m.reason||'Fuiste desconectado');
+    if(!state&&m.type!=='join')return;
+    if(me.host&&m.type==='join'){
+      const existing=state.players[m.id];
+      const duplicate=Object.entries(state.players).some(([id,p])=>id!==m.id&&normalizeName(p.name)===normalizeName(m.name));
+      if(duplicate){pub({type:'joinResult',id:m.id,accepted:false,reason:'Ese nombre ya está siendo usado'});return}
+      state.players[m.id]={name:m.name,score:existing?.score||0,host:false};broadcastState();pub({type:'joinResult',id:m.id,accepted:true,reconnected:!!existing});
+    }
+    if(me.host&&m.type==='buzz'&&state.open&&!state.winner&&m.round===state.round&&!state.blocked?.includes(m.id)){pauseMusic();state.winner={id:m.id,name:m.name,receivedAt:Date.now(),sentAt:m.at,reactionMs:Math.max(0,Math.round((m.at||Date.now())-(state.roundStartedAt||m.at||Date.now())))};state.open=false;render();broadcastState()}
+  }
+
+  function syncCountdown(){
+    clearInterval(countdownTimer);countdownTimer=null;
+    const until=Number(state?.countdownUntil||0), box=$('countdown');
+    if(!until||Date.now()>=until){box.classList.add('hidden');box.classList.remove('go');return}
+    let last='';
+    const tick=()=>{const left=until-Date.now();if(left<=0){box.textContent='¡YA!';box.classList.add('go');stopCountdownSound();goSound();setTimeout(()=>box.classList.add('hidden'),520);clearInterval(countdownTimer);countdownTimer=null;return}const n=Math.ceil(left/1000),txt=String(n);box.classList.remove('hidden','go');box.textContent=txt;if(txt!==last){last=txt}};
+    tick();countdownTimer=setInterval(tick,80);
+  }
+  function showWinnerFlash(w){
+    clearTimeout(flashTimer);$('flashName').textContent=w.name;$('flashReaction').textContent=Number.isFinite(w.reactionMs)?`${w.reactionMs} ms`:'';$('winnerFlash').classList.remove('hidden');flashTimer=setTimeout(()=>$('winnerFlash').classList.add('hidden'),1800)
+  }
+
+  function render(){
+    if(!state)return;
+    const w=state.winner, winnerKey=w?`${state.round}:${w.id}`:'';
+    $('winnerBox').classList.toggle('hidden',!w);if(w){$('winnerName').textContent=w.name;$('winnerTime').textContent=Number.isFinite(w.reactionMs)?`Tiempo de reacción: ${w.reactionMs} ms`:'Primero de la ronda';if(winnerKey!==lastWinnerKey){lastWinnerKey=winnerKey;winnerSound();showWinnerFlash(w)}}
+    syncCountdown();const counting=Number(state.countdownUntil||0)>Date.now();$('roundText').textContent=counting?'Preparados…':(state.open?'¡Ronda abierta!':'Ronda pausada');
+    const joined=!me.host&&!!state.players?.[me.id],blocked=state.blocked?.includes(me.id),can=!me.host&&joined&&state.open&&!state.winner&&!counting&&!blocked;$('buzz').disabled=!can;$('buzzHint').textContent=!joined?'Esperando autorización del anfitrión…':blocked?'Respondiste incorrecto; los demás siguen jugando':can?'Tocá apenas reconozcas la canción':(w?`${w.name} fue primero`:(state.revealed?'Ronda terminada':'El anfitrión debe iniciar la ronda'));
+    $('correct').disabled=!w;$('wrong').disabled=!w;
+    const reveal=!!state.revealed&&!!state.song;$('songReveal').classList.toggle('hidden',!reveal);if(reveal){$('songTitle').textContent=state.song.title||state.song.filename||'Canción';$('songArtist').textContent=state.song.artist||'';$('songAlbum').textContent=state.song.album||'';if(state.song.cover){$('songCover').src=state.song.cover;$('songCover').classList.remove('hidden')}else{$('songCover').classList.add('hidden');$('songCover').removeAttribute('src')}}
+
+    $('players').innerHTML=Object.entries(state.players||{}).filter(([,p])=>!p.host).sort((a,b)=>b[1].score-a[1].score).map(([id,p])=>`<div class="player"><strong>${escapeHtml(p.name)}${id===me.id?' (vos)':''}</strong><span class="score">${p.score}</span></div>`).join('')||'<div class="small">Todavía no entró ningún jugador</div>';
+  }
+  function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+
+  function fileId(file){return `${file.webkitRelativePath||file.name}|${file.size}|${file.lastModified}`}
+  function guessMeta(file){const raw=file.name.replace(/\.[^.]+$/,'');const parts=raw.split(/\s+-\s+/);return parts.length>1?{artist:parts.shift().trim(),title:parts.join(' - ').trim(),album:''}:{artist:'',title:raw,album:''}}
+  function resizeCover(picture){return new Promise(resolve=>{try{let bin='';for(const b of picture.data)bin+=String.fromCharCode(b);const img=new Image();img.onload=()=>{const c=document.createElement('canvas'),max=320,scale=Math.min(1,max/Math.max(img.width,img.height));c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.72))};img.onerror=()=>resolve('');img.src=`data:${picture.format};base64,${btoa(bin)}`}catch{resolve('')}})}
+  function readTags(file){return new Promise(resolve=>{const fallback=guessMeta(file);if(!window.jsmediatags)return resolve({...fallback,cover:''});window.jsmediatags.read(file,{onSuccess:async r=>{const t=r.tags||{};resolve({title:t.title||fallback.title,artist:t.artist||fallback.artist,album:t.album||'',cover:t.picture?await resizeCover(t.picture):''})},onError:()=>resolve({...fallback,cover:''})})})}
+  async function loadSongs(fileList){tracks.forEach(t=>{if(t.playUrl)URL.revokeObjectURL(t.playUrl)});const audio=[...fileList].filter(f=>f.type.startsWith('audio/')||/\.(mp3|m4a|aac|wav|ogg|flac)$/i.test(f.name));tracks=audio.map(file=>({id:fileId(file),file,playUrl:null,meta:null}));$('songStatus').textContent=tracks.length?`${tracks.length} canciones cargadas. Listas para jugar.`:'No encontré audios compatibles. El modo prueba sigue disponible.';toast(tracks.length?`Se cargaron ${tracks.length} canciones`:'No encontré canciones compatibles')}
+  async function chooseTrack(){if(!tracks.length)return demoTrack;state.usedSongs=Array.isArray(state.usedSongs)?state.usedSongs:[];let available=tracks.filter(t=>!state.usedSongs.includes(t.id));if(!available.length){state.usedSongs=[];available=[...tracks];toast('Ya salieron todas. Empieza una nueva vuelta sin repetir.')}const track=available[Math.floor(Math.random()*available.length)];if(!track.meta)track.meta=await readTags(track.file);state.usedSongs.push(track.id);return track}
+  function prepareMusic(track){return new Promise((resolve,reject)=>{
+    music.pause();music.removeAttribute('src');music.load();
+    if(track.demo){music.src=track.playUrl}else{if(track.playUrl)URL.revokeObjectURL(track.playUrl);track.playUrl=URL.createObjectURL(track.file);music.src=track.playUrl}
+    music.preload='auto';
+    let done=false;const finish=(fn,v)=>{if(done)return;done=true;clearTimeout(timer);music.onloadedmetadata=null;music.oncanplay=null;music.onerror=null;fn(v)};
+    const ready=()=>{try{const duration=Number.isFinite(music.duration)&&music.duration>0?music.duration:1;const max=track.demo?0:Math.max(0,Math.min(40,duration-1));const start=max>0?Math.random()*max:0;music.currentTime=start;finish(resolve,start)}catch(e){finish(reject,e)}};
+    music.onloadedmetadata=ready;music.oncanplay=()=>{if(!done&&music.readyState>=1)ready()};
+    music.onerror=()=>finish(reject,new Error('No pude reproducir ese archivo. Probá con otro MP3 o usá el modo de prueba.'));
+    const timer=setTimeout(()=>finish(reject,new Error('La canción tardó demasiado en abrirse. Probá con otro MP3.')),12000);music.load();
+  })}
+  function playMusic(){if(!me.host||!currentTrack)return;music.play().catch(()=>toast('Tocá la pantalla y volvé a iniciar la ronda para habilitar el audio'))}
+  function pauseMusic(){if(me.host)music.pause()}
+  function stopMusic(){if(me.host){music.pause();music.currentTime=0}}
+
+  function showQr(){
+    $('qrCode').innerHTML='';$('qrRoom').textContent=me.room;
+    const shareUrl=location.protocol.startsWith('http')?`${location.origin}${location.pathname}?room=${encodeURIComponent(me.room)}`:`Código de sala: ${me.room}`;
+    new QRCode($('qrCode'),{text:shareUrl,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
+    $('qrHelp').textContent=location.protocol.startsWith('http')?'Al escanearlo se abre el juego con el código cargado.':'Como esta prueba es un archivo descargado, el QR solo muestra el código de sala.';
+    $('qrModal').classList.remove('hidden');
+  }
+
+  const queryRoom=new URLSearchParams(location.search).get('room');if(queryRoom)$('room').value=queryRoom;
+  if(saved){$('name').value=saved.name||'';$('room').value=saved.room||''}
+  $('create').onclick=()=>{ensureAudio();me.name=$('name').value.trim()||'Anfitrión';me.room=String(Math.floor(1000+Math.random()*9000));me.host=true;if(!connected)return toast('Esperá a que diga Conectado');enter()};
+  $('join').onclick=()=>{ensureAudio();me.name=$('name').value.trim();me.room=$('room').value.trim();if(!me.name||me.room.length<4)return toast('Poné tu nombre y el código');if(!connected)return toast('Esperá a que diga Conectado');me.host=false;enter()};
+  $('buzz').onclick=()=>{ensureAudio();if(!state?.open||state.winner||Number(state.countdownUntil||0)>Date.now())return;buzzSound();$('buzz').disabled=true;pub({type:'buzz',id:me.id,name:me.name,round:state.round})};
+  $('newRound').onclick=async()=>{ensureAudio();const track=await chooseTrack();if(!track)return;try{await prepareMusic(track)}catch(err){if(!track.demo)state.usedSongs=(state.usedSongs||[]).filter(id=>id!==track.id);return toast(err?.message||'No pude abrir esa canción')}currentTrack=track;state.round++;state.open=false;state.winner=null;state.blocked=[];state.revealed=false;state.song={id:track.id,filename:track.file.name,...track.meta};lastWinnerKey='';state.countdownUntil=Date.now()+3500;state.roundStartedAt=state.countdownUntil;startCountdownSound();render();broadcastState();setTimeout(()=>{if(!state||state.countdownUntil===0)return;state.countdownUntil=0;state.open=true;state.roundStartedAt=Date.now();playMusic();render();broadcastState()},3500)};
+  $('correct').onclick=()=>{ensureAudio();if(!state?.winner)return;const winner=state.winner;state.players[winner.id]??={name:winner.name,score:0};state.players[winner.id].score++;state.winner=null;state.open=false;state.revealed=true;stopMusic();correctSound();render();broadcastState()};
+  $('wrong').onclick=()=>{ensureAudio();if(!state?.winner)return;const winner=state.winner;state.players[winner.id]??={name:winner.name,score:0};state.players[winner.id].score--;state.blocked=Array.from(new Set([...(state.blocked||[]),winner.id]));state.winner=null;state.open=true;wrongSound();playMusic();render();broadcastState()};
+  $('songFiles').onchange=e=>loadSongs(e.target.files);
+  $('showQr').onclick=showQr;$('closeQr').onclick=()=>$('qrModal').classList.add('hidden');$('qrModal').onclick=e=>{if(e.target===$('qrModal'))$('qrModal').classList.add('hidden')};
+  $('leave').onclick=()=>{stopMusic();stopCountdownSound();clearSession();location.href=location.pathname};
+  document.addEventListener('pointerdown',ensureAudio,{once:true});connect();
+})();
+</script>
+</body></html>
