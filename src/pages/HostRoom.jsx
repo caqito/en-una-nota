@@ -10,8 +10,12 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
+import {
+  onValue,
+  ref as realtimeRef,
+} from 'firebase/database'
 import { useAnonymousAuth } from '../hooks/useAnonymousAuth'
-import { db } from '../firebase/config'
+import { db, realtimeDb } from '../firebase/config'
 import { songs } from '../songs'
 
 const ROUND_OPTIONS = [5, 10, 15, 20]
@@ -53,6 +57,8 @@ export default function HostRoom() {
 
   const audioRef = useRef(null)
   const previousQueueLengthRef = useRef(0)
+  const buzzSettleTimerRef = useRef(null)
+  const pendingBuzzesRef = useRef({})
 
   const normalizedRoomId = roomId?.toUpperCase()
 
@@ -111,6 +117,117 @@ export default function HostRoom() {
       },
     )
   }, [normalizedRoomId])
+
+  useEffect(() => {
+    if (
+      !normalizedRoomId ||
+      room?.status !== 'playing' ||
+      !room?.currentRound ||
+      room?.roundStatus === 'finished'
+    ) {
+      return
+    }
+
+    const buzzesRef = realtimeRef(
+      realtimeDb,
+      `buzzerRooms/${normalizedRoomId}/${room.currentRound}/buzzes`,
+    )
+
+    const roomRef = doc(db, 'rooms', normalizedRoomId)
+
+    const commitBuzzes = async () => {
+      const buzzes = Object.values(pendingBuzzesRef.current)
+        .filter((buzz) => buzz?.uid && Number.isFinite(buzz?.pressedAt))
+        .sort((a, b) => a.pressedAt - b.pressedAt)
+
+      if (buzzes.length === 0) return
+
+      const currentQueue = room?.buzzQueue ?? []
+      const existing = new Set(currentQueue)
+
+      const newBuzzes = buzzes.filter(
+        (buzz) => !existing.has(buzz.uid),
+      )
+
+      if (newBuzzes.length === 0) return
+
+      // Una vez mostrado un jugador, nunca reordenamos a los que ya
+      // estaban en la cola. Las pulsaciones nuevas solo se agregan detrás.
+      const nextQueue = [
+        ...currentQueue,
+        ...newBuzzes.map((buzz) => buzz.uid),
+      ]
+
+      const nextBuzzTimes = {
+        ...(room?.buzzTimes ?? {}),
+      }
+
+      newBuzzes.forEach((buzz) => {
+        nextBuzzTimes[buzz.uid] = buzz.pressedAt
+      })
+
+      try {
+        await updateDoc(roomRef, {
+          buzzQueue: nextQueue,
+          buzzTimes: nextBuzzTimes,
+        })
+      } catch (error) {
+        console.error('No se pudo sincronizar el orden del pulsador.', error)
+      }
+    }
+
+    const unsubscribe = onValue(buzzesRef, (snapshot) => {
+      const value = snapshot.val() ?? {}
+      pendingBuzzesRef.current = value
+
+      const buzzCount = Object.keys(value).length
+
+      if (buzzCount === 0) return
+
+      // La música se pausa apenas llega cualquier pulsación a RTDB.
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause()
+        setIsAudioPlaying(false)
+      }
+
+      const currentQueue = room?.buzzQueue ?? []
+
+      if (currentQueue.length === 0) {
+        // Damos una ventana muy corta para que lleguen pulsaciones casi
+        // simultáneas y recién entonces fijamos el primer orden.
+        if (!buzzSettleTimerRef.current) {
+          buzzSettleTimerRef.current = window.setTimeout(() => {
+            buzzSettleTimerRef.current = null
+            commitBuzzes()
+          }, 450)
+        }
+
+        return
+      }
+
+      // Si el primer orden ya quedó fijado, las pulsaciones posteriores
+      // se agregan sin cambiar jamás quién estaba antes.
+      commitBuzzes()
+    })
+
+    return () => {
+      unsubscribe()
+
+      if (buzzSettleTimerRef.current) {
+        window.clearTimeout(buzzSettleTimerRef.current)
+        buzzSettleTimerRef.current = null
+      }
+
+      pendingBuzzesRef.current = {}
+    }
+  }, [
+    normalizedRoomId,
+    room?.status,
+    room?.currentRound,
+    room?.roundStatus,
+    room?.buzzQueue,
+    room?.buzzTimes,
+  ])
 
   useEffect(() => {
     const currentQueueLength = room?.buzzQueue?.length ?? 0

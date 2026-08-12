@@ -1,13 +1,17 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   collection,
   doc,
   onSnapshot,
-  runTransaction,
 } from 'firebase/firestore'
+import {
+  onValue,
+  ref as realtimeRef,
+  set,
+} from 'firebase/database'
 import { useAnonymousAuth } from '../hooks/useAnonymousAuth'
-import { db } from '../firebase/config'
+import { db, realtimeDb } from '../firebase/config'
 
 export default function PlayerRoom() {
   const { roomId } = useParams()
@@ -20,6 +24,8 @@ export default function PlayerRoom() {
   const [roomError, setRoomError] = useState(null)
   const [buzzing, setBuzzing] = useState(false)
   const [localBuzzed, setLocalBuzzed] = useState(false)
+
+  const serverTimeOffsetRef = useRef(0)
 
   const normalizedRoomId = roomId?.toUpperCase()
 
@@ -118,6 +124,14 @@ export default function PlayerRoom() {
     setBuzzing(false)
   }, [room?.currentRound])
 
+  useEffect(() => {
+    const offsetRef = realtimeRef(realtimeDb, '.info/serverTimeOffset')
+
+    return onValue(offsetRef, (snapshot) => {
+      serverTimeOffsetRef.current = snapshot.val() ?? 0
+    })
+  }, [])
+
   const alreadyBuzzed =
     localBuzzed ||
     (user &&
@@ -149,88 +163,30 @@ export default function PlayerRoom() {
   const handleBuzz = async () => {
     if (!canBuzz || !normalizedRoomId || !user) return
 
-    // Guardamos el instante del toque ANTES de esperar a Firebase.
-    // Así el orden depende mucho menos del lag de cada teléfono.
-    const pressedAt = Date.now()
+    const currentRound = room?.currentRound ?? 0
+
+    if (!currentRound) return
+
+    // Corregimos el reloj del teléfono con el desfase informado
+    // por Realtime Database. Así Android y iPhone usan una referencia
+    // de tiempo mucho más parecida.
+    const pressedAt =
+      Date.now() + serverTimeOffsetRef.current
 
     playBuzzSound()
     setLocalBuzzed(true)
     setBuzzing(true)
 
     try {
-      const roomRef = doc(db, 'rooms', normalizedRoomId)
-      const playerRef = doc(
-        db,
-        'rooms',
-        normalizedRoomId,
-        'players',
-        user.uid,
+      const buzzRef = realtimeRef(
+        realtimeDb,
+        `buzzerRooms/${normalizedRoomId}/${currentRound}/buzzes/${user.uid}`,
       )
 
-      const registered = await runTransaction(db, async (transaction) => {
-        const roomSnapshot = await transaction.get(roomRef)
-        const playerSnapshot = await transaction.get(playerRef)
-
-        if (!roomSnapshot.exists()) {
-          throw new Error('La sala ya no existe.')
-        }
-
-        if (!playerSnapshot.exists()) {
-          throw new Error('No se encontró tu jugador.')
-        }
-
-        const roomData = roomSnapshot.data()
-        const playerData = playerSnapshot.data()
-        const playerCanPlayFromRound = playerData.canPlayFromRound ?? 1
-
-        if (
-          roomData.status !== 'playing' ||
-          roomData.roundStatus === 'finished' ||
-          roomData.buzzerEnabled !== true ||
-          (roomData.currentRound ?? 0) < playerCanPlayFromRound
-        ) {
-          return false
-        }
-
-        const currentQueue = roomData.buzzQueue ?? []
-
-        if (currentQueue.includes(user.uid)) {
-          return true
-        }
-
-        const currentBuzzTimes = roomData.buzzTimes ?? {}
-        const nextBuzzTimes = {
-          ...currentBuzzTimes,
-          [user.uid]: pressedAt,
-        }
-
-        const nextQueue = [...currentQueue, user.uid].sort((a, b) => {
-          const aTime = nextBuzzTimes[a] ?? Number.MAX_SAFE_INTEGER
-          const bTime = nextBuzzTimes[b] ?? Number.MAX_SAFE_INTEGER
-
-          if (aTime !== bTime) {
-            return aTime - bTime
-          }
-
-          // Si dos pulsaciones caen en el mismo milisegundo,
-          // conservamos el orden que ya tenía la cola.
-          return (
-            [...currentQueue, user.uid].indexOf(a) -
-            [...currentQueue, user.uid].indexOf(b)
-          )
-        })
-
-        transaction.update(roomRef, {
-          buzzQueue: nextQueue,
-          buzzTimes: nextBuzzTimes,
-        })
-
-        return true
+      await set(buzzRef, {
+        uid: user.uid,
+        pressedAt,
       })
-
-      if (!registered) {
-        setLocalBuzzed(false)
-      }
     } catch (error) {
       console.error(error)
       setLocalBuzzed(false)
