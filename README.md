@@ -2,14 +2,39 @@
 
 Juego musical con salas y botoneras desde el celular.
 
-## Publicarlo
+## Stack
 
-1. Subí **todos los archivos y carpetas** de este proyecto a la raíz del repositorio de GitHub.
-2. En Vercel, elegí **Add New → Project** e importá el repositorio `en-una-nota`.
-3. Dejá la configuración predeterminada y tocá **Deploy**.
+- React + Vite
+- Firebase (Authentication anónimo + Firestore)
+- Tailwind CSS
+- React Router
+- Deploy en Vercel
 
-No necesita instalación ni comando de compilación.
+## Desarrollo local
 
-## Prueba
+1. Copiá `.env.example` a `.env` y completá las credenciales de Firebase.
+2. Instalá dependencias:
 
-El anfitrión puede iniciar una partida sin cargar música: hay una canción de prueba incluida. También puede seleccionar varios archivos de audio desde su dispositivo.
+```bash
+npm install
+```
+
+3. Iniciá el servidor de desarrollo:
+
+```bash
+npm run dev
+```
+
+## Deploy en Vercel
+
+1. Importá el repositorio en Vercel.
+2. Agregá las variables de entorno `VITE_FIREBASE_*` desde tu proyecto de Firebase.
+3. Deploy automático con `npm run build`.
+
+## Páginas
+
+- `/` — Home
+- `/crear` — Crear sala
+- `/unirse` — Unirse a sala
+- `/sala/anfitrion/:roomId` — Sala del anfitrión
+- `/sala/jugador/:roomId` — Sala del jugador

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #10071f;
+  --color-panel: #1d1033;
+  --color-pink: #ff2d8d;
+  --color-yellow: #ffd84a;
+  --color-cyan: #38e8ff;
+  --color-muted: #b9acd1;
+  --color-ok: #55e59b;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: Inter, system-ui, "Segoe UI", Arial, sans-serif;
+  background: radial-gradient(circle at top, #32145b 0%, #10071f 45%, #08040f 100%);
+  color: white;
+}
