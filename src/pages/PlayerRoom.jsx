@@ -19,6 +19,7 @@ export default function PlayerRoom() {
   const [players, setPlayers] = useState([])
   const [roomError, setRoomError] = useState(null)
   const [buzzing, setBuzzing] = useState(false)
+  const [localBuzzed, setLocalBuzzed] = useState(false)
 
   const normalizedRoomId = roomId?.toUpperCase()
 
@@ -112,9 +113,15 @@ export default function PlayerRoom() {
     })
   }, [room?.nextRoomCode, navigate])
 
+  useEffect(() => {
+    setLocalBuzzed(false)
+    setBuzzing(false)
+  }, [room?.currentRound])
+
   const alreadyBuzzed =
-    user &&
-    room?.buzzQueue?.includes(user.uid)
+    localBuzzed ||
+    (user &&
+      room?.buzzQueue?.includes(user.uid))
 
   const canPlayFromRound = player?.canPlayFromRound ?? 1
 
@@ -142,7 +149,12 @@ export default function PlayerRoom() {
   const handleBuzz = async () => {
     if (!canBuzz || !normalizedRoomId || !user) return
 
+    // Guardamos el instante del toque ANTES de esperar a Firebase.
+    // Así el orden depende mucho menos del lag de cada teléfono.
+    const pressedAt = Date.now()
+
     playBuzzSound()
+    setLocalBuzzed(true)
     setBuzzing(true)
 
     try {
@@ -155,7 +167,7 @@ export default function PlayerRoom() {
         user.uid,
       )
 
-      await runTransaction(db, async (transaction) => {
+      const registered = await runTransaction(db, async (transaction) => {
         const roomSnapshot = await transaction.get(roomRef)
         const playerSnapshot = await transaction.get(playerRef)
 
@@ -177,19 +189,51 @@ export default function PlayerRoom() {
           roomData.buzzerEnabled !== true ||
           (roomData.currentRound ?? 0) < playerCanPlayFromRound
         ) {
-          return
+          return false
         }
 
         const currentQueue = roomData.buzzQueue ?? []
 
-        if (currentQueue.includes(user.uid)) return
+        if (currentQueue.includes(user.uid)) {
+          return true
+        }
+
+        const currentBuzzTimes = roomData.buzzTimes ?? {}
+        const nextBuzzTimes = {
+          ...currentBuzzTimes,
+          [user.uid]: pressedAt,
+        }
+
+        const nextQueue = [...currentQueue, user.uid].sort((a, b) => {
+          const aTime = nextBuzzTimes[a] ?? Number.MAX_SAFE_INTEGER
+          const bTime = nextBuzzTimes[b] ?? Number.MAX_SAFE_INTEGER
+
+          if (aTime !== bTime) {
+            return aTime - bTime
+          }
+
+          // Si dos pulsaciones caen en el mismo milisegundo,
+          // conservamos el orden que ya tenía la cola.
+          return (
+            [...currentQueue, user.uid].indexOf(a) -
+            [...currentQueue, user.uid].indexOf(b)
+          )
+        })
 
         transaction.update(roomRef, {
-          buzzQueue: [...currentQueue, user.uid],
+          buzzQueue: nextQueue,
+          buzzTimes: nextBuzzTimes,
         })
+
+        return true
       })
+
+      if (!registered) {
+        setLocalBuzzed(false)
+      }
     } catch (error) {
       console.error(error)
+      setLocalBuzzed(false)
       setRoomError('No se pudo registrar tu pulsación.')
     } finally {
       setBuzzing(false)
@@ -432,11 +476,11 @@ export default function PlayerRoom() {
                 <div className="fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-3 px-4">
                   <button
                     type="button"
-                    onClick={handleBuzz}
+                    onPointerDown={handleBuzz}
                     disabled={!canBuzz}
                     className={`grid aspect-square w-64 place-items-center rounded-full border-[12px] text-center text-4xl font-black transition ${
                       canBuzz
-                        ? 'cursor-pointer border-red-900 bg-gradient-to-br from-red-400 via-red-600 to-red-900 shadow-[0_18px_0_#79070c,0_30px_55px_rgba(239,27,36,0.42)] active:scale-95'
+                        ? 'cursor-pointer touch-manipulation select-none border-red-900 bg-gradient-to-br from-red-400 via-red-600 to-red-900 shadow-[0_18px_0_#79070c,0_30px_55px_rgba(239,27,36,0.42)] active:scale-95'
                         : 'cursor-not-allowed border-red-950 bg-red-950 opacity-50'
                     }`}
                   >
