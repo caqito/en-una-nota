@@ -344,15 +344,22 @@ export default function HostRoom() {
     }
 
     try {
+      // Primero habilitamos los pulsadores en todos los celulares.
+      await updateDoc(doc(db, 'rooms', normalizedRoomId), {
+        buzzerEnabled: true,
+      })
+
+      // Damos medio segundo para que Android/iPhone reciban la habilitación
+      // antes de que empiece a sonar la canción.
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 500)
+      })
+
       audioRef.current.currentTime = 0
       await audioRef.current.play()
 
       setSongStarted(true)
       setIsAudioPlaying(true)
-
-      await updateDoc(doc(db, 'rooms', normalizedRoomId), {
-        buzzerEnabled: true,
-      })
     } catch (error) {
       console.error(error)
       setRoomError('No se pudo reproducir la canción.')
