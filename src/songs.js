@@ -1,5 +1,4 @@
 export const songs = [
-  "DUKI - Cine 🚬.mp3",
   "DUKI - Cine.mp3",
   "DUKI - GIVENCHY (Video Oficial).mp3",
   "DUKI - Goteo (Video Oficial).mp3",

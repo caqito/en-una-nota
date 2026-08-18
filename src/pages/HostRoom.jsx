@@ -17,6 +17,7 @@ import {
 import { useAnonymousAuth } from '../hooks/useAnonymousAuth'
 import { db, realtimeDb } from '../firebase/config'
 import { songs } from '../songs'
+import { QRCodeSVG } from 'qrcode.react'
 
 const ROUND_OPTIONS = [5, 10, 15, 20]
 
@@ -54,6 +55,7 @@ export default function HostRoom() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
   const [songStarted, setSongStarted] = useState(false)
   const [showFinishConfirm, setShowFinishConfirm] = useState(false)
+  const [showQr, setShowQr] = useState(false)
 
   const audioRef = useRef(null)
   const previousQueueLengthRef = useRef(0)
@@ -725,15 +727,13 @@ export default function HostRoom() {
     setRoomError(null)
 
     try {
-      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
       let newRoomCode = null
       let newRoomRef = null
 
       for (let attempt = 0; attempt < 20; attempt += 1) {
-        const candidate = Array.from(
-          { length: 4 },
-          () => alphabet[Math.floor(Math.random() * alphabet.length)],
-        ).join('')
+        const candidate = Math.floor(
+          1000 + Math.random() * 9000,
+        ).toString()
 
         const candidateRef = doc(db, 'rooms', candidate)
         const candidateSnapshot = await getDoc(candidateRef)
@@ -855,6 +855,11 @@ export default function HostRoom() {
       ? `/songs/${room.currentSong.replace(/#/g, '%23')}`
       : ''
 
+  const joinUrl =
+    normalizedRoomId
+      ? `https://en-una-nota-eight.vercel.app/unirse?room=${normalizedRoomId}`
+      : ''
+
   return (
     <div className="space-y-6">
       {room?.currentSong && (
@@ -891,6 +896,16 @@ export default function HostRoom() {
         <p className="mt-2 text-4xl font-black tracking-[0.3em] text-yellow">
           {normalizedRoomId ?? '----'}
         </p>
+
+        {joinUrl && (
+          <button
+            type="button"
+            onClick={() => setShowQr(true)}
+            className="mt-5 rounded-2xl bg-white/10 px-4 py-3 font-bold ring-1 ring-white/15"
+          >
+            📱 Mostrar QR
+          </button>
+        )}
       </section>
 
       {roomError && (
@@ -1323,6 +1338,57 @@ export default function HostRoom() {
             </section>
           )}
         </>
+      )}
+
+      {joinUrl && (
+        <button
+          type="button"
+          onClick={() => setShowQr(true)}
+          className="fixed bottom-5 right-5 z-40 rounded-full bg-white px-5 py-4 font-black text-black shadow-2xl ring-1 ring-black/10"
+        >
+          📱 QR
+        </button>
+      )}
+
+      {showQr && joinUrl && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-black/80 p-5"
+          onClick={() => setShowQr(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-panel p-6 text-center ring-1 ring-white/15"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm text-muted">
+              Código de sala
+            </p>
+
+            <p className="mt-2 text-4xl font-black tracking-[0.3em] text-yellow">
+              {normalizedRoomId}
+            </p>
+
+            <div className="mx-auto mt-5 w-fit rounded-3xl bg-white p-4">
+              <QRCodeSVG
+                value={joinUrl}
+                size={220}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+
+            <p className="mt-4 text-sm text-muted">
+              Escaneá el QR para entrar directamente a esta sala.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowQr(false)}
+              className="mt-5 w-full rounded-2xl bg-bg px-4 py-3 font-bold ring-1 ring-white/15"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
 
       {showFinishConfirm &&

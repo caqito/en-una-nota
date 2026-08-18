@@ -1,10 +1,17 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+} from 'firebase/firestore'
 import { useAnonymousAuth } from '../hooks/useAnonymousAuth'
 import { db } from '../firebase/config'
 
 export default function JoinRoom() {
+  const [searchParams] = useSearchParams()
+
   const [roomCode, setRoomCode] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [joining, setJoining] = useState(false)
@@ -13,13 +20,38 @@ export default function JoinRoom() {
   const navigate = useNavigate()
   const { user, loading, error: authError } = useAnonymousAuth()
 
+  useEffect(() => {
+    const roomFromUrl = searchParams.get('room')
+
+    if (roomFromUrl) {
+      const cleanRoom = roomFromUrl.replace(/\D/g, '').slice(0, 4)
+      setRoomCode(cleanRoom)
+    }
+
+    const savedName = localStorage.getItem('en-una-nota-player-name')
+
+    if (savedName) {
+      setPlayerName(savedName)
+    }
+  }, [searchParams])
+
+  const handleRoomCodeChange = (event) => {
+    const onlyNumbers = event.target.value.replace(/\D/g, '').slice(0, 4)
+    setRoomCode(onlyNumbers)
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const code = roomCode.trim().toUpperCase()
+    const code = roomCode.trim()
     const name = playerName.trim()
 
     if (!code || !name || !user || joining) return
+
+    if (code.length !== 4) {
+      setJoinError('El código debe tener 4 números.')
+      return
+    }
 
     setJoining(true)
     setJoinError(null)
@@ -38,18 +70,34 @@ export default function JoinRoom() {
         throw new Error('No se puede entrar a esta partida.')
       }
 
-      const currentRound = roomData.currentRound ?? 0
-      const joiningLate = roomData.status === 'playing'
+      const playerRef = doc(db, 'rooms', code, 'players', user.uid)
+      const existingPlayerSnapshot = await getDoc(playerRef)
 
-      await setDoc(doc(db, 'rooms', code, 'players', user.uid), {
-        uid: user.uid,
-        name,
-        score: 0,
-        joinedAt: serverTimestamp(),
-        connected: true,
-        joinedRound: currentRound,
-        canPlayFromRound: joiningLate ? currentRound + 1 : 1,
-      })
+      localStorage.setItem('en-una-nota-player-name', name)
+
+      if (existingPlayerSnapshot.exists()) {
+        await setDoc(
+          playerRef,
+          {
+            name,
+            connected: true,
+          },
+          { merge: true },
+        )
+      } else {
+        const currentRound = roomData.currentRound ?? 0
+        const joiningLate = roomData.status === 'playing'
+
+        await setDoc(playerRef, {
+          uid: user.uid,
+          name,
+          score: 0,
+          joinedAt: serverTimestamp(),
+          connected: true,
+          joinedRound: currentRound,
+          canPlayFromRound: joiningLate ? currentRound + 1 : 1,
+        })
+      }
 
       navigate(`/sala/jugador/${code}`)
     } catch (err) {
@@ -99,11 +147,13 @@ export default function JoinRoom() {
         <input
           id="roomCode"
           value={roomCode}
-          onChange={(event) => setRoomCode(event.target.value)}
-          placeholder="ABCD"
+          onChange={handleRoomCodeChange}
+          placeholder="1234"
           maxLength={4}
+          inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete="off"
-          className="w-full rounded-2xl border border-white/15 bg-bg px-4 py-3 text-lg uppercase tracking-widest outline-none focus:border-cyan"
+          className="w-full rounded-2xl border border-white/15 bg-bg px-4 py-3 text-lg tracking-widest outline-none focus:border-cyan"
         />
 
         <button
@@ -112,7 +162,7 @@ export default function JoinRoom() {
             loading ||
             !user ||
             !playerName.trim() ||
-            !roomCode.trim() ||
+            roomCode.length !== 4 ||
             joining
           }
           className="w-full rounded-2xl bg-gradient-to-br from-pink to-purple-600 px-4 py-3 font-bold disabled:opacity-50"
